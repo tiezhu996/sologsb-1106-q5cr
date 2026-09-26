@@ -12,6 +12,7 @@
 
   const { blocks: orderedBlocks, carvedRate } = useBlockOrder(null)
   const blockStats = blockStore.statsByDraft
+  const thicknessIssues = blockStore.thicknessIssuesByDraft
 
   let genreFilter = $state<DraftGenre | '全部'>('全部')
   let statusFilter = $state<DraftStatus | '全部'>('全部')
@@ -120,6 +121,7 @@
     return {
       stats: $blockStats[draft.id] ?? { total: 0, carved: 0, rate: 0 },
       batch: latestBatchByDraft[draft.id],
+      thicknessOff: ($thicknessIssues[draft.id] ?? []).length,
     }
   }
 </script>
@@ -245,6 +247,11 @@
           <div class="progress-label"><span>版片进度</span><strong>{data.stats.carved}/{data.stats.total}</strong></div>
           <div class="progress-track"><i style={`width: ${data.stats.rate}%`}></i></div>
           <small>刻成率 {data.stats.rate}%</small>
+          {#if data.thicknessOff > 0}
+            <small class="thickness-off" data-testid={`thickness-off-${draft.id}`}>
+              还有 {data.thicknessOff} 块版厚不合（与墨线版相差超过 1 mm），须刨到合厚
+            </small>
+          {/if}
         </div>
 
         <div class="latest-batch">

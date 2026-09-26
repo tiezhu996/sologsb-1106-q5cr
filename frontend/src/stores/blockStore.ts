@@ -1,6 +1,7 @@
 import { derived, writable } from 'svelte/store'
 import type { Block } from '../types/block'
 import { db } from '../utils/db'
+import { findThicknessIssues, type ThicknessIssue } from '../utils/thickness'
 
 const blockList = writable<Block[]>([])
 
@@ -20,6 +21,20 @@ const statsByDraft = derived(blockList, ($blocks) => {
     stats[block.draftId] = current
   }
   return stats
+})
+
+const thicknessIssuesByDraft = derived(blockList, ($blocks) => {
+  const byDraft: Record<string, Block[]> = {}
+  for (const block of $blocks) {
+    const group = byDraft[block.draftId]
+    if (group) group.push(block)
+    else byDraft[block.draftId] = [block]
+  }
+  const issues: Record<string, ThicknessIssue[]> = {}
+  for (const [draftId, draftBlocks] of Object.entries(byDraft)) {
+    issues[draftId] = findThicknessIssues(draftBlocks)
+  }
+  return issues
 })
 
 async function load(): Promise<void> {
@@ -57,6 +72,7 @@ async function removeByDraft(draftId: string): Promise<void> {
 export const blockStore = {
   subscribe: blockList.subscribe,
   statsByDraft,
+  thicknessIssuesByDraft,
   load,
   create,
   update,

@@ -12,6 +12,7 @@
   import { useBlockOrder } from '../hooks/useBlockOrder'
   import { useCarverLoad } from '../hooks/useCarverLoad'
   import { validateColorSequence } from '../utils/seq'
+  import { thicknessIssueOf, findKeyBlock, type ThicknessIssue } from '../utils/thickness'
   import { db } from '../utils/db'
   import type { Block } from '../types/block'
   import type { ProcessStage } from '../types/node'
@@ -27,11 +28,21 @@
 
   let sequenceDraft = $state<Record<string, number>>({})
   let defectDraft = $state<Record<string, string>>({})
+  let thicknessDraft = $state<Record<string, number>>({})
   let selectedCarverId = $state('')
   let notice = $state('')
   let lastSync = $state('刚刚')
 
   const draft = $derived($draftStore.find((item) => item.id === draftId) ?? null)
+  const keyBlock = $derived(findKeyBlock($orderedBlocks))
+  const thicknessIssueMap = $derived.by(() => {
+    const map = new Map<string, ThicknessIssue>()
+    for (const block of $orderedBlocks) {
+      const issue = thicknessIssueOf(block, keyBlock)
+      if (issue) map.set(block.id, issue)
+    }
+    return map
+  })
 
   onMount(() => {
     void Promise.all([draftStore.load(), blockStore.load(), carverStore.load()])
@@ -45,6 +56,7 @@
     for (const block of $orderedBlocks) {
       if (sequenceDraft[block.id] === undefined) sequenceDraft[block.id] = block.colorNo
       if (defectDraft[block.id] === undefined) defectDraft[block.id] = block.defectNote
+      if (thicknessDraft[block.id] === undefined) thicknessDraft[block.id] = block.thicknessMm
     }
   })
 
@@ -74,6 +86,11 @@
   }
 
   async function markCarved(block: Block): Promise<void> {
+    const issue = thicknessIssueOf(block, keyBlock)
+    if (issue) {
+      notice = `${block.blockName}版厚与墨线版相差 ${issue.diffMm} mm，超过 1 mm 不放行，须先刨到合厚再标刻成。`
+      return
+    }
     await blockStore.update(block.id, { state: '已刻成' })
     await carverStore.releaseBlock(block.id)
     const currentBlocks = get(blockStore).filter((item) => item.draftId === draftId)
@@ -129,6 +146,26 @@
   async function saveDefect(block: Block): Promise<void> {
     await blockStore.update(block.id, { defectNote: defectDraft[block.id] ?? '' })
     lastSync = `${block.blockName}崩口记录已更新`
+  }
+
+  async function saveThickness(block: Block): Promise<void> {
+    const next = Number(thicknessDraft[block.id])
+    if (!Number.isFinite(next) || next <= 0) {
+      notice = '版厚需为大于 0 的数值（毫米）。'
+      return
+    }
+
+    const rounded = Math.round(next * 10) / 10
+    await blockStore.update(block.id, { thicknessMm: rounded })
+    thicknessDraft[block.id] = rounded
+
+    const issue = thicknessIssueOf({ ...block, thicknessMm: rounded }, keyBlock)
+    if (issue) {
+      notice = `${block.blockName}版厚已记为 ${rounded} mm，仍与墨线版相差 ${issue.diffMm} mm，继续刨到合厚。`
+    } else {
+      notice = `${block.blockName}版厚已记为 ${rounded} mm，与墨线版合厚，可以标刻成。`
+    }
+    lastSync = `${block.blockName}版厚已存档`
   }
 
   async function returnToStage(_index: number, stage: ProcessStage): Promise<void> {
@@ -201,6 +238,7 @@
             </thead>
             <tbody>
               {#each $orderedBlocks as block, blockIndex (block.id)}
+                {@const issue = thicknessIssueMap.get(block.id)}
                 <tr data-testid="row-block">
                   <td class="sequence-cell">
                     {#if sequenceDraft[block.id] !== undefined}
@@ -220,9 +258,26 @@
                   <td>
                     <ColorSwatch colorNo={block.colorNo} blockName={block.blockName} />
                   </td>
-                  <td>
+                  <td class="thickness-cell">
                     <strong>{block.woodType}</strong>
                     <small>{block.thicknessMm} mm</small>
+                    {#if thicknessDraft[block.id] !== undefined}
+                      <input
+                        class="thickness-input"
+                        type="number"
+                        min="1"
+                        step="0.5"
+                        data-testid={`field-thickness-${block.id}`}
+                        bind:value={thicknessDraft[block.id]}
+                      />
+                    {/if}
+                    <button class="mini-button" type="button" onclick={() => saveThickness(block)}>存版厚</button>
+                    {#if issue}
+                      <small class="thickness-warning" data-testid={`thickness-warning-${block.id}`}>
+                        与墨线版（{issue.keyThicknessMm} mm）相差 {issue.diffMm} mm，
+                        {block.thicknessMm > issue.keyThicknessMm ? '偏厚，须刨到合厚' : '偏薄，需换合厚版料'}
+                      </small>
+                    {/if}
                   </td>
                   <td>
                     <select
@@ -239,7 +294,20 @@
                   <td>
                     <span class="tag state-{block.state}">{block.state}</span>
                     {#if block.state !== '已刻成' && block.state !== '已修版'}
-                      <button class="mini-button strong" type="button" onclick={() => markCarved(block)}>标刻成</button>
+                      {#if issue}
+                        <button
+                          class="mini-button strong"
+                          type="button"
+                          disabled
+                          data-testid={`block-carve-${block.id}`}
+                          title={`版厚与墨线版相差 ${issue.diffMm} mm，刨到合厚后方可标刻成`}
+                        >
+                          标刻成
+                        </button>
+                        <small class="thickness-warning">版厚不合，暂不放行</small>
+                      {:else}
+                        <button class="mini-button strong" type="button" data-testid={`block-carve-${block.id}`} onclick={() => markCarved(block)}>标刻成</button>
+                      {/if}
                     {/if}
                   </td>
                   <td>

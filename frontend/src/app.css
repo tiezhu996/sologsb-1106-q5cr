@@ -277,6 +277,35 @@ footer {
   background: var(--jade);
 }
 
+.mini-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.thickness-cell input.thickness-input {
+  width: 6.2rem;
+  min-height: 2.35rem;
+  margin-top: 0.35rem;
+  padding: 0.3rem 0.55rem;
+}
+
+.data-table td small.thickness-warning {
+  color: var(--cinnabar-dark);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.progress-block small.thickness-off {
+  margin-top: 0.45rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: var(--radius-sm);
+  color: var(--cinnabar-dark);
+  background: rgba(169, 52, 39, 0.08);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .summary-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
