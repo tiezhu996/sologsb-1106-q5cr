@@ -12,6 +12,7 @@
 
   const { blocks: orderedBlocks, carvedRate } = useBlockOrder(null)
   const blockStats = blockStore.statsByDraft
+  const thicknessCounts = blockStore.thicknessCountByDraft
 
   let genreFilter = $state<DraftGenre | '全部'>('全部')
   let statusFilter = $state<DraftStatus | '全部'>('全部')
@@ -119,6 +120,7 @@
   function draftCardData(draft: Draft) {
     return {
       stats: $blockStats[draft.id] ?? { total: 0, carved: 0, rate: 0 },
+      thicknessIssues: $thicknessCounts[draft.id] ?? 0,
       batch: latestBatchByDraft[draft.id],
     }
   }
@@ -245,6 +247,11 @@
           <div class="progress-label"><span>版片进度</span><strong>{data.stats.carved}/{data.stats.total}</strong></div>
           <div class="progress-track"><i style={`width: ${data.stats.rate}%`}></i></div>
           <small>刻成率 {data.stats.rate}%</small>
+          {#if data.thicknessIssues > 0}
+            <small class="thickness-warning" data-testid={`flag-thickness-${draft.id}`}>
+              厚度不合 {data.thicknessIssues} 块 · 待刨合厚
+            </small>
+          {/if}
         </div>
 
         <div class="latest-batch">

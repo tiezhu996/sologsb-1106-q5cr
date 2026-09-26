@@ -12,6 +12,7 @@
   import { useBlockOrder } from '../hooks/useBlockOrder'
   import { useCarverLoad } from '../hooks/useCarverLoad'
   import { validateColorSequence } from '../utils/seq'
+  import { findThicknessIssues, formatThicknessGap, keyBlockOf } from '../utils/thickness'
   import { db } from '../utils/db'
   import type { Block } from '../types/block'
   import type { ProcessStage } from '../types/node'
@@ -27,11 +28,20 @@
 
   let sequenceDraft = $state<Record<string, number>>({})
   let defectDraft = $state<Record<string, string>>({})
+  let thicknessDraft = $state<Record<string, number>>({})
   let selectedCarverId = $state('')
   let notice = $state('')
   let lastSync = $state('刚刚')
 
   const draft = $derived($draftStore.find((item) => item.id === draftId) ?? null)
+  const keyBlock = $derived(keyBlockOf($orderedBlocks))
+  const thicknessGapByBlock = $derived.by(() => {
+    const gaps: Record<string, number> = {}
+    for (const issue of findThicknessIssues($orderedBlocks)) {
+      gaps[issue.blockId] = issue.gapMm
+    }
+    return gaps
+  })
 
   onMount(() => {
     void Promise.all([draftStore.load(), blockStore.load(), carverStore.load()])
@@ -45,6 +55,7 @@
     for (const block of $orderedBlocks) {
       if (sequenceDraft[block.id] === undefined) sequenceDraft[block.id] = block.colorNo
       if (defectDraft[block.id] === undefined) defectDraft[block.id] = block.defectNote
+      if (thicknessDraft[block.id] === undefined) thicknessDraft[block.id] = block.thicknessMm
     }
   })
 
@@ -74,6 +85,11 @@
   }
 
   async function markCarved(block: Block): Promise<void> {
+    const gap = thicknessGapByBlock[block.id]
+    if (gap !== undefined) {
+      notice = `${block.blockName}版厚与墨线版差 ${formatThicknessGap(gap)} mm，须刨到合厚后再标刻成。`
+      return
+    }
     await blockStore.update(block.id, { state: '已刻成' })
     await carverStore.releaseBlock(block.id)
     const currentBlocks = get(blockStore).filter((item) => item.draftId === draftId)
@@ -131,6 +147,25 @@
     lastSync = `${block.blockName}崩口记录已更新`
   }
 
+  async function saveThickness(block: Block): Promise<void> {
+    const next = Number(thicknessDraft[block.id])
+    if (!Number.isFinite(next) || next < 5 || next > 60) {
+      notice = `${block.blockName}版厚需在 5–60 mm 之间，请复核后再存。`
+      return
+    }
+
+    const rounded = Math.round(next * 10) / 10
+    await blockStore.update(block.id, { thicknessMm: rounded })
+    thicknessDraft[block.id] = rounded
+    notice = ''
+
+    const currentBlocks = get(blockStore).filter((item) => item.draftId === draftId)
+    const stillOff = findThicknessIssues(currentBlocks).some((issue) => issue.blockId === block.id)
+    lastSync = stillOff
+      ? `${block.blockName}版厚已记为 ${rounded} mm，与墨线版仍不合`
+      : `${block.blockName}版厚刨到 ${rounded} mm，厚度核对已通过`
+  }
+
   async function returnToStage(_index: number, stage: ProcessStage): Promise<void> {
     const block = $orderedBlocks[0]
     if (!block) return
@@ -184,6 +219,12 @@
         <span class="sync-note">{lastSync}</span>
       </div>
 
+      {#if keyBlock}
+        <p class="thickness-rule">
+          以墨线版 {keyBlock.thicknessMm} mm 为基准，色版厚度相差超过 1 mm 不放行标刻成，刨到合厚后标记自动退掉。
+        </p>
+      {/if}
+
       {#if $orderedBlocks.length === 0}
         <EmptyBox title="尚未分版" message="先回画稿总览建立画稿，系统会生成四块基础版片。" />
       {:else}
@@ -222,7 +263,26 @@
                   </td>
                   <td>
                     <strong>{block.woodType}</strong>
-                    <small>{block.thicknessMm} mm</small>
+                    {#if thicknessDraft[block.id] !== undefined}
+                      <div class="thickness-edit">
+                        <input
+                          data-testid={`field-thickness-${block.id}`}
+                          type="number"
+                          min="5"
+                          max="60"
+                          step="0.5"
+                          bind:value={thicknessDraft[block.id]}
+                          aria-label={`${block.blockName}版厚（毫米）`}
+                        />
+                        <span>mm</span>
+                        <button class="mini-button" type="button" onclick={() => saveThickness(block)}>存版厚</button>
+                      </div>
+                    {/if}
+                    {#if thicknessGapByBlock[block.id] !== undefined}
+                      <span class="tag thickness-alert" data-testid={`flag-thickness-${block.id}`}>
+                        与墨线版差 {formatThicknessGap(thicknessGapByBlock[block.id])} mm · 待刨合厚
+                      </span>
+                    {/if}
                   </td>
                   <td>
                     <select
@@ -239,7 +299,13 @@
                   <td>
                     <span class="tag state-{block.state}">{block.state}</span>
                     {#if block.state !== '已刻成' && block.state !== '已修版'}
-                      <button class="mini-button strong" type="button" onclick={() => markCarved(block)}>标刻成</button>
+                      {@const gap = thicknessGapByBlock[block.id]}
+                      {#if gap !== undefined}
+                        <button class="mini-button strong" type="button" disabled>标刻成</button>
+                        <small class="thickness-hold">差 {formatThicknessGap(gap)} mm，刨到合厚后放行</small>
+                      {:else}
+                        <button class="mini-button strong" type="button" onclick={() => markCarved(block)}>标刻成</button>
+                      {/if}
                     {/if}
                   </td>
                   <td>

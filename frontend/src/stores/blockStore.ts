@@ -1,6 +1,7 @@
 import { derived, writable } from 'svelte/store'
 import type { Block } from '../types/block'
 import { db } from '../utils/db'
+import { countThicknessIssuesByDraft } from '../utils/thickness'
 
 const blockList = writable<Block[]>([])
 
@@ -21,6 +22,8 @@ const statsByDraft = derived(blockList, ($blocks) => {
   }
   return stats
 })
+
+const thicknessCountByDraft = derived(blockList, ($blocks) => countThicknessIssuesByDraft($blocks))
 
 async function load(): Promise<void> {
   const records = await db.blocks.toArray()
@@ -57,6 +60,7 @@ async function removeByDraft(draftId: string): Promise<void> {
 export const blockStore = {
   subscribe: blockList.subscribe,
   statsByDraft,
+  thicknessCountByDraft,
   load,
   create,
   update,

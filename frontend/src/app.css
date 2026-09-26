@@ -1185,3 +1185,58 @@ textarea:focus {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.thickness-rule {
+  margin: -0.35rem 0 1rem;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.thickness-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.thickness-edit input {
+  width: 4.8rem;
+  min-height: 2.1rem;
+  padding: 0.28rem 0.45rem;
+}
+
+.thickness-edit span {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+}
+
+.thickness-edit .mini-button {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.tag.thickness-alert {
+  margin-top: 0.45rem;
+  color: var(--cinnabar-dark);
+  background: rgba(169, 52, 39, 0.12);
+  white-space: normal;
+}
+
+.mini-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.thickness-hold {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--cinnabar-dark);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.thickness-warning {
+  color: var(--cinnabar-dark);
+  font-weight: 800;
+}
